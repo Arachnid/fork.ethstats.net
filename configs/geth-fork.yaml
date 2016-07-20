@@ -1,0 +1,18 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: geth-fork
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: geth-fork
+    spec:
+      containers:
+      - name: geth-fork
+        image: arachnid/geth:master
+        args: [ "--fast", "--rpc", "--rpcaddr=0.0.0.0", "--rpccorsdomain=*", "--support-dao-fork" ]
+        ports:
+        - containerPort: 30303
+        - containerPort: 8545

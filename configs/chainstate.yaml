@@ -1,0 +1,17 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: chainstate
+spec:
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: chainstate
+    spec:
+      containers:
+      - name: chainstate
+        image: arachnid/chainstate:v0.0.16
+        ports:
+        - containerPort: 80
+          hostPort: 80

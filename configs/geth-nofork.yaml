@@ -1,0 +1,18 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: geth-nofork
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: geth-nofork
+    spec:
+      containers:
+      - name: geth-nofork
+        image: arachnid/geth:master
+        args: [ "--fast", "--rpc", "--rpcaddr=0.0.0.0", "--rpccorsdomain=*", "--oppose-dao-fork" ]
+        ports:
+        - containerPort: 30303
+        - containerPort: 8545

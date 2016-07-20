@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: geth-old
+spec:
+  selector:
+    app: geth-old
+  ports:
+  - protocol: TCP
+    port: 8545
