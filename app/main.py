@@ -39,7 +39,7 @@ def find_ancestors(roots, earliest):
 
         blocks[block['hash']] = block
         number = long(block['number'], 16)
-        if number > earliest:
+        if number >= earliest:
             if block['parentHash'] not in blocks:
                 frontier.add((clientname, block['parentHash']))
             else:
@@ -51,7 +51,7 @@ def find_ancestors(roots, earliest):
                     blocks[uncle]['clients'].add(clientname)
 
     # Clean up the cache
-    while True:
+    while block_hash_heap:
         blocknum, blockhash = block_hash_heap[0]
         if blocknum >= earliest: break
         heapq.heappop(block_hash_heap)
@@ -75,6 +75,7 @@ def build_block_graph(roots, earliest):
             'parents': [block['parentHash']] + block['uncles'],
             'clients': list(block['clients']),
         })
+    nodes.sort(key=lambda node: node['number'])
     return nodes
 
 
@@ -91,6 +92,7 @@ def build_block_info(clientname):
     return {
         'number': long(latest['number'], 16),
         'hash': latest['hash'],
+        'shortHash': latest['hash'][:10],
         'difficulty': long(latest['difficulty'], 16),
         'totalDifficulty': long(latest['totalDifficulty'], 16),
         'name': clientname,
@@ -98,7 +100,16 @@ def build_block_info(clientname):
     
 
 def build_block_infos():
-    return [build_block_info(clientname) for clientname in clients]
+    infos = [build_block_info(clientname) for clientname in clients]
+    max_difficulty = float(max(info['difficulty'] for info in infos))
+    max_total_difficulty = max(info['totalDifficulty'] for info in infos)
+    for info in infos:
+        info['difficulty'] = int(100 * info['difficulty'] / max_difficulty)
+        if info['totalDifficulty'] == max_total_difficulty:
+            info['totalDifficulty'] = 'D'
+        else:
+            info['totalDifficulty'] = 'D - %d' % (max_total_difficulty - info['totalDifficulty'])
+    return infos
 
 
 @app.route('/')
@@ -110,7 +121,8 @@ def index():
 def blocks(): 
     blockinfos = build_block_infos()
     latest = max(block['number'] for block in blockinfos)
-    earliest = max(request.args.get('earliest', latest - 16), latest - 64)
+    earliest = max(int(request.args.get('since', latest - 16)), latest - 64)
+    app.logger.debug("Earliest: %d", earliest)
     roots = [(block['name'], block['hash']) for block in blockinfos]
     nodes = build_block_graph(roots, earliest)
     response = make_response(json.dumps({
