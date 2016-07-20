@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" integrity="sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap-theme.min.css" integrity="sha384-fLW2N01lMqjakBkx3l/M9EahuwpSfeNvV63J5ezn3uZzapT0u7EYsXMjQV+0En5r" crossorigin="anonymous">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/handlebars.js/4.0.5/handlebars.min.js" crossorigin="anonymous"></script>
+    <script   src="https://code.jquery.com/jquery-3.1.0.min.js"   integrity="sha256-cCueBR6CsyA4/9szpPfrX3s49M9vUU5BgtiJj06wt/s="   crossorigin="anonymous"></script>
+    <title>Ethereum chainstate</title>
+</head>
+<body>
+    <div class="container">
+        <div class="row">
+            <div class="col-md-12">
+                <h1>Ethereum chain state</h1>
+                <table class="table" id="blockinfos">
+                </table>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-12">
+                <style>
+
+                .node circle {
+                  fill: #999;
+                }
+
+                .node text {
+                  font: 10px sans-serif;
+                }
+
+                .node--internal circle {
+                  fill: #555;
+                }
+
+                .node--internal text {
+                  text-shadow: 0 1px 0 #fff, 0 -1px 0 #fff, 1px 0 0 #fff, -1px 0 0 #fff;
+                }
+
+                .link {
+                  fill: none;
+                  stroke: #555;
+                  stroke-opacity: 0.4;
+                  stroke-width: 1.5px;
+                }
+
+                </style>
+                <svg width="600" height="1650"></svg>
+                <script src="//d3js.org/d3.v4.min.js"></script>
+                <script>
+                    /*var nodes = {{nodes}};
+                    var edges = {{edges}};
+                    var latest = {{latest}};
+
+                    var nodesByRank = {};
+                    for(var i = 0; i < nodes.length; i++) {
+                        var node = nodes[i];
+                        if(nodesByRank[node.number] == undefined) {
+                            nodesByRank[node.number] = [node];
+                        } else {
+                            nodesByRank[node.number].push(node);
+                        }
+                    }
+
+                    var blockNumbers = [];
+                    for(var number in nodesByRank) {
+                        blockNumbers.push(number);
+                        for(var i = 0; i < nodesByRank[number].length; i++) {
+                            var node = nodesByRank[number][i];
+                            node.y = (latest - node.number) * 50;
+                            node.x = i * 100 + 75;
+                        }
+                    }
+
+                    var nodesByHash = {}
+                    for(var i = 0; i < nodes.length; i++) {
+                        nodesByHash[nodes[i].hash] = nodes[i];
+                    }
+
+                    var svg = d3.select("svg"),
+                        width = +svg.attr("width"),
+                        height = +svg.attr("height"),
+                        g = svg.append("g").attr("transform", "translate(5, 40)");
+
+                    var numbers = g.selectAll("node")
+                        .data(blockNumbers)
+                        .enter().append("text")
+                            .attr("transform", function(d) { return "translate(0," + (latest - d) * 50 + ")"; })
+                            .attr("dy", 3)
+                            .attr("x", 8)
+                            .style("text-anchor", "start")
+                            .text(function(d) { return d; });
+
+                    var node = g.selectAll("node")
+                        .data(nodes)
+                        .enter().append("g")
+                            .attr("class", "node--internal")
+                            .attr("transform", function(d) { return "translate(" + d.x + ", " + d.y + ")"; });
+                    node.append("circle")
+                        .attr("r", 2.5);
+                    node.append("text")
+                        .attr("dy", 3)
+                        .attr("x", 8)
+                        .style("text-anchor", "start")
+                        .text(function(d) { return d.hash.substring(0, 10); });
+
+                    var link = g.selectAll(".link")
+                        .data(edges)
+                        .enter().append("path")
+                            .attr("class", "link")
+                            .attr("d", function(d) {
+                                var fromNode = nodesByHash[d[0]],
+                                    toNode = nodesByHash[d[1]];
+
+                                return "M" + toNode.x + "," + toNode.y
+                                    + "C" + toNode.x  + "," + (toNode.y + 25)
+                                    + " " + fromNode.x + "," + (fromNode.y - 25)
+                                    + " " + fromNode.x + "," + fromNode.y;
+                            });*/
+                </script>
+            </div>
+        </div>
+    </div>
+
+    <script id="state-template" type="text/x-handlebars-template">
+        <thead>
+            <tr>
+                <th></th>
+                {{#latest}}
+                    <th>{{name}}</th>
+                {{/latest}}
+            </tr>
+        </thead>
+        <tr>
+            <th>Block</th>
+            {{#latest}}
+                <td><a href="https://etherscan.io/block/{{hash}}">{{hash}}</a></td>
+            {{/latest}}
+        </tr>
+        <tr>
+            <th>Block Number</th>
+            {{#latest}}
+                <td>{{number}}</td>
+            {{/latest}}
+        </tr>
+        <tr>
+            <th>Difficulty</th>
+            {{#latest}}
+                <td>{{difficulty}}</td>
+            {{/latest}}
+        </tr>
+        <tr>
+            <th>Total Difficulty</th>
+            {{#latest}}
+                <td>{{totalDifficulty}}</td>
+            {{/latest}}
+        </tr>
+    </script>
+    <script type="text/javascript">
+        function buildGraph(nodes) {
+            var nodesByHash = {}
+            var latest = 0;
+            for(var i = 0; i < nodes.length; i++) {
+                nodesByHash[nodes[i].hash] = nodes[i];
+                latest = Math.max(latest, nodes[i].number);
+            }
+
+            var nodesByRank = {};
+            var edges = [];
+            var maxInRank = 1;
+            for(var i = 0; i < nodes.length; i++) {
+                var node = nodes[i];
+
+                if(nodesByRank[node.number] == undefined) {
+                    nodesByRank[node.number] = [node];
+                } else {
+                    nodesByRank[node.number].push(node);
+                    maxInRank = Math.max(maxInRank, nodesByRank[node.number].length);
+                }
+
+                for(var j = 0; j < node.parents.length; j++) {
+                    if(nodesByHash[node.parents[j]] != undefined) {
+                        edges.push([node.parents[j], node.hash]);
+                    }
+                }
+            }
+
+            var blockNumbers = [];
+            for(var number in nodesByRank) {
+                blockNumbers.push(number);
+                for(var i = 0; i < nodesByRank[number].length; i++) {
+                    var node = nodesByRank[number][i];
+                    node.y = (latest - node.number) * 50;
+                    node.x = i * 100 + 75;
+                }
+            }
+
+            var svg = d3.select("svg"),
+                g = svg.append("g").attr("transform", "translate(5, 40)");
+
+            svg.attr("height", blockNumbers.length * 50);
+            svg.attr("width", maxInRank * 100 + 75);
+
+            var numbers = g.selectAll("node")
+                .data(blockNumbers)
+                .enter().append("text")
+                    .attr("transform", function(d) { return "translate(0," + (latest - d) * 50 + ")"; })
+                    .attr("dy", 3)
+                    .attr("x", 8)
+                    .style("text-anchor", "start")
+                    .text(function(d) { return d; });
+
+            var node = g.selectAll("node")
+                .data(nodes)
+                .enter().append("g")
+                    .attr("class", "node--internal")
+                    .attr("transform", function(d) { return "translate(" + d.x + ", " + d.y + ")"; });
+            node.append("circle")
+                .attr("r", 2.5);
+            node.append("text")
+                .attr("dy", 3)
+                .attr("x", 8)
+                .style("text-anchor", "start")
+                .text(function(d) { return d.hash.substring(0, 10); });
+
+            var link = g.selectAll(".link")
+                .data(edges)
+                .enter().append("path")
+                    .attr("class", "link")
+                    .attr("d", function(d) {
+                        var fromNode = nodesByHash[d[0]],
+                            toNode = nodesByHash[d[1]];
+
+                        return "M" + toNode.x + "," + toNode.y
+                            + "C" + toNode.x  + "," + (toNode.y + 25)
+                            + " " + fromNode.x + "," + (fromNode.y - 25)
+                            + " " + fromNode.x + "," + fromNode.y;
+                    });
+        }
+
+        function loadData() {
+            $.ajax({url: '/blocks', dataType: 'json'}).done(function(response) {
+                var template = Handlebars.compile($("#state-template").html());
+                $("#blockinfos").html(template(response));
+                buildGraph(response['nodes']);
+            });
+        }
+
+        $(document).ready(function() {
+            loadData();
+        });
+    </script>
+</body>
+</html>

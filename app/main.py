@@ -1,8 +1,7 @@
 import datetime
 from eth_rpc_client import Client
-from flask import Flask
+from flask import Flask, request, make_response, send_file
 import heapq
-from jinja2 import Environment, PackageLoader
 import json
 import logging
 
@@ -12,25 +11,6 @@ from chainstate import config
 graph_length=16
 app = Flask(__name__)
 clients = {nodes[0]: Client(host=nodes[1], port=nodes[2]) for nodes in config.nodes}
-env = Environment(loader=PackageLoader('chainstate', 'templates'))
-
-
-lastpolled = {}
-latest_blocks = {}
-def build_block_info(clientname):
-    if clientname not in lastpolled or datetime.datetime.now() - lastpolled[clientname] > datetime.timedelta(seconds=5):
-        latest_blocks[clientname] = clients[clientname].get_block_by_number('latest', False)
-    latest = latest_blocks[clientname]
-    return {
-        'number': long(latest['number'], 16),
-        'hash': latest['hash'],
-        'difficulty': long(latest['difficulty'], 16),
-        'totalDifficulty': long(latest['totalDifficulty'], 16),
-    }
-    
-
-def build_block_infos():
-    return {clientname: build_block_info(clientname) for clientname in clients}
 
 
 block_hash_heap = []
@@ -51,16 +31,24 @@ def find_ancestors(roots, earliest):
     while frontier:
         clientname, blockhash = frontier.pop()
         block = get_block_by_hash(clientname, blockhash)
-        if block is None: continue
+        if block is None:
+            app.logger.debug("Discarded missing block with hash %s", blockhash)
+            continue
+        block = dict(block)
+        block['clients'] = set([clientname])
 
         blocks[block['hash']] = block
         number = long(block['number'], 16)
         if number > earliest:
             if block['parentHash'] not in blocks:
                 frontier.add((clientname, block['parentHash']))
+            else:
+                blocks[block['parentHash']]['clients'].add(clientname)
             for uncle in block['uncles']:
                 if uncle not in blocks:
                     frontier.add((clientname, uncle))
+                else:
+                    blocks[uncle]['clients'].add(clientname)
 
     # Clean up the cache
     while True:
@@ -75,7 +63,6 @@ def find_ancestors(roots, earliest):
 def build_block_graph(roots, earliest):
     blocks = find_ancestors(roots, earliest)
     nodes = []
-    edges = []
     for block in blocks.itervalues():
         nodes.append({
             'number': long(block['number'], 16),
@@ -85,24 +72,53 @@ def build_block_graph(roots, earliest):
             'size': long(block['size'], 16),
             'gasUsed': long(block['gasUsed'], 16),
             'gasLimit': long(block['gasLimit'], 16),
+            'parents': [block['parentHash']] + block['uncles'],
+            'clients': list(block['clients']),
         })
-        if block['parentHash'] in blocks:
-            edges.append((block['parentHash'], block['hash']))
-        for uncle in block['uncles']:
-            if uncle in blocks:
-                edges.append((uncle, block['hash']))
-    return nodes, edges
+    return nodes
+
+
+lastpolled = {}
+latest_blocks = {}
+def get_latest_block(clientname):
+    if clientname not in lastpolled or datetime.datetime.now() - lastpolled[clientname] > datetime.timedelta(seconds=5):
+        latest_blocks[clientname] = clients[clientname].get_block_by_number('latest', False)
+    return latest_blocks[clientname]
+
+
+def build_block_info(clientname):
+    latest = get_latest_block(clientname)
+    return {
+        'number': long(latest['number'], 16),
+        'hash': latest['hash'],
+        'difficulty': long(latest['difficulty'], 16),
+        'totalDifficulty': long(latest['totalDifficulty'], 16),
+        'name': clientname,
+    }
+    
+
+def build_block_infos():
+    return [build_block_info(clientname) for clientname in clients]
 
 
 @app.route('/')
 def index():
-    template = env.get_template('index.html')
+    return send_file('./static/index.html')
+
+
+@app.route('/blocks')
+def blocks(): 
     blockinfos = build_block_infos()
-    latest = max(block['number'] for block in blockinfos.values())
-    nodes, edges = build_block_graph(
-        [(clientname, block['hash']) for clientname, block in blockinfos.iteritems()],
-        latest - graph_length)
-    return template.render(blockinfos=blockinfos, nodes=json.dumps(nodes), edges=json.dumps(edges), latest=latest)
+    latest = max(block['number'] for block in blockinfos)
+    earliest = max(request.args.get('earliest', latest - 16), latest - 64)
+    roots = [(block['name'], block['hash']) for block in blockinfos]
+    nodes = build_block_graph(roots, earliest)
+    response = make_response(json.dumps({
+        'latest': blockinfos,
+        'nodes': nodes,
+    }, indent=4))
+    response.headers['Content-Type'] = 'text/json'
+    return response
 
 
 if __name__ == '__main__':
