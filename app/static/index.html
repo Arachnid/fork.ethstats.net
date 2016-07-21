@@ -56,7 +56,7 @@
             <tr>
                 <th></th>
                 {{#latest}}
-                    <th>{{name}}</th>
+                    <th><span style="">{{name}}</span></th>
                 {{/latest}}
             </tr>
         </thead>
@@ -86,6 +86,13 @@
         </tr>
     </script>
     <script type="text/javascript">
+        var colors = {
+            'Hard fork': '#7570b3',
+            'Non-fork': '#d95f02',
+            'Legacy': '#1b9e77',
+            'fork': '#7570b3',
+        };
+
         function buildGraph(nodesByHash) {
             var nodes = [];
             var latest = 0;
@@ -117,8 +124,20 @@
             var blockNumbers = [];
             for(var number in nodesByRank) {
                 blockNumbers.push(number);
-                for(var i = 0; i < nodesByRank[number].length; i++) {
-                    var node = nodesByRank[number][i];
+                var rank = nodesByRank[number];
+                rank.sort(function(a, b) {
+                    var sa = [-a.clients.length, a.clients[0], a.hash];
+                    var sb = [-b.clients.length, b.clients[0], b.hash];
+                    if(sa > sb) {
+                        return 1;
+                    } else if(sa < sb) {
+                        return -1;
+                    }
+                    return 0;
+                });
+
+                for(var i = 0; i < rank.length; i++) {
+                    var node = rank[i];
                     node.y = (latest - node.number) * 50;
                     node.x = i * 100 + 75;
                 }
@@ -129,6 +148,14 @@
 
             svg.attr("height", blockNumbers.length * 50);
             svg.attr("width", maxInRank * 100 + 75);
+
+            function nodeColor(d) {
+                if(d.clients.length > 1) {
+                    return "#000000";
+                } else {
+                    return colors[d.clients[0]];
+                }
+            }
 
             var numbers = g.selectAll(".number")
                 .data(blockNumbers, function(d) { return d; });
@@ -153,12 +180,12 @@
                     .attr("class", "node node--internal")
                     .attr("transform", function(d) { return "translate(" + d.x + ", " + d.y + ")"; });
             node.append("circle")
-                .attr("r", 2.5);
+                .attr("r", 2.5)
             node.append("text")
                 .attr("dy", 3)
                 .attr("x", 8)
                 .style("text-anchor", "start")
-                .text(function(d) { return d.hash.substring(0, 10); });
+                .text(function(d) { return d.hash.substring(0, 10); })
             nodeset.exit().remove();
 
             var link = g.selectAll(".link")
@@ -192,6 +219,9 @@
         var lastBlock = 0;
 
         function processData(response) {
+            for(var k in response.latest) {
+                response.latest[k].color = colors[response.latest[k].name];
+            }
             var template = Handlebars.compile($("#state-template").html());
             $("#blockinfos").html(template(response));
 
