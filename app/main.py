@@ -9,51 +9,54 @@ from chainstate import config
 
 
 graph_length=16
+cache_duration = 3600
 app = Flask(__name__)
 clients = {nodes[0]: Client(host=nodes[1], port=nodes[2]) for nodes in config.nodes}
 
 
 block_hash_heap = []
 block_hash_cache = {}
+latest = 0
 def get_block_by_hash(clientname, h):
+    global latest
+
     if h not in block_hash_cache:
         app.logger.debug("Fetching block not in cache: %s", h)
         block = clients[clientname].get_block_by_hash(h)
         block_hash_cache[h] = block
         if block is not None:
-            heapq.heappush(block_hash_heap, (long(block['number'], 16), h))
+            ts = long(block['timestamp'], 16)
+            latest = max(latest, ts)
+            heapq.heappush(block_hash_heap, (ts, h))
     return block_hash_cache[h]
 
 
 def find_ancestors(roots, earliest):
     blocks = {}
-    frontier = set(roots)
-    while frontier:
-        clientname, blockhash = frontier.pop()
-        block = get_block_by_hash(clientname, blockhash)
-        if block is None:
-            app.logger.debug("Discarded missing block with hash %s", blockhash)
-            continue
-        block = dict(block)
-        block['clients'] = set([clientname])
+    for clientname, roothash in roots:
+        frontier = set([roothash])
+        while frontier:
+            blockhash = frontier.pop()
+            block = get_block_by_hash(clientname, blockhash)
+            if block is None:
+                app.logger.debug("Discarded missing block with hash %s", blockhash)
+                continue
 
-        blocks[block['hash']] = block
-        number = long(block['number'], 16)
-        if number >= earliest:
-            if block['parentHash'] not in blocks:
-                frontier.add((clientname, block['parentHash']))
-            else:
-                blocks[block['parentHash']]['clients'].add(clientname)
-            for uncle in block['uncles']:
-                if uncle not in blocks:
-                    frontier.add((clientname, uncle))
-                else:
-                    blocks[uncle]['clients'].add(clientname)
+            block = dict(block)
+            blocks[block['hash']] = block
+
+            ts = long(block['timestamp'], 16)
+            if ts >= earliest:
+                if block['parentHash'] not in blocks:
+                    frontier.add(block['parentHash'])
+                for uncle in block['uncles']:
+                    if uncle not in blocks:
+                        frontier.add(uncle)
 
     # Clean up the cache
     while block_hash_heap:
-        blocknum, blockhash = block_hash_heap[0]
-        if blocknum >= earliest: break
+        blockts, blockhash = block_hash_heap[0]
+        if blockts >= latest - cache_duration: break
         heapq.heappop(block_hash_heap)
         del block_hash_cache[blockhash]
 
@@ -66,6 +69,7 @@ def build_block_graph(roots, earliest):
     for block in blocks.itervalues():
         nodes.append({
             'number': long(block['number'], 16),
+            'timestamp': long(block['timestamp'], 16),
             'hash': block['hash'],
             'difficulty': long(block['difficulty'], 16),
             'totalDifficulty': long(block['totalDifficulty'], 16),
@@ -73,7 +77,6 @@ def build_block_graph(roots, earliest):
             'gasUsed': long(block['gasUsed'], 16),
             'gasLimit': long(block['gasLimit'], 16),
             'parents': [block['parentHash']] + block['uncles'],
-            'clients': list(block['clients']),
         })
     nodes.sort(key=lambda node: node['number'])
     return nodes
@@ -91,6 +94,7 @@ def build_block_info(clientname):
     latest = get_latest_block(clientname)
     return {
         'number': long(latest['number'], 16),
+        'timestamp': long(latest['timestamp'], 16),
         'hash': latest['hash'],
         'shortHash': latest['hash'][:10],
         'difficulty': long(latest['difficulty'], 16),
@@ -104,11 +108,11 @@ def build_block_infos():
     max_difficulty = float(max(info['difficulty'] for info in infos))
     max_total_difficulty = max(info['totalDifficulty'] for info in infos)
     for info in infos:
-        info['difficulty'] = int(100 * info['difficulty'] / max_difficulty)
+        info['difficulty'] = "%.1f" % (100 * info['difficulty'] / float(max_difficulty),)
         if info['totalDifficulty'] == max_total_difficulty:
             info['totalDifficulty'] = 'D'
         else:
-            info['totalDifficulty'] = 'D - %d' % (max_total_difficulty - info['totalDifficulty'])
+            info['totalDifficulty'] = 'D - %f' % (max_total_difficulty - info['totalDifficulty'])
     return infos
 
 
@@ -120,9 +124,8 @@ def index():
 @app.route('/blocks')
 def blocks(): 
     blockinfos = build_block_infos()
-    latest = max(block['number'] for block in blockinfos)
-    earliest = max(int(request.args.get('since', latest - 16)), latest - 64)
-    app.logger.debug("Earliest: %d", earliest)
+    latest = max(block['timestamp'] for block in blockinfos)
+    earliest = max(int(request.args.get('since', latest - 300)), latest - cache_duration)
     roots = [(block['name'], block['hash']) for block in blockinfos]
     nodes = build_block_graph(roots, earliest)
     response = make_response(json.dumps({
