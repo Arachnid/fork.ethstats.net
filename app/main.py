@@ -12,7 +12,20 @@ graph_length=16
 cache_duration = 3600
 fork_total_difficulty = 39490902020018959982l
 app = Flask(__name__)
-clients = {nodes[0]: Client(host=nodes[1], port=nodes[2]) for nodes in config.nodes}
+
+
+def get_nodes():
+    if app.debug:
+        return config.nodes_debug
+    else:
+        return config.nodes
+
+
+clients = {}
+def get_client(name):
+    if len(clients) == 0:
+        clients.update({name: Client(host=node['host'], port=node['port']) for name, node in get_nodes().iteritems()})
+    return clients[name]
 
 
 block_hash_heap = []
@@ -24,7 +37,7 @@ def get_block_by_hash(clientname, h):
 
     if h not in block_hash_cache:
         app.logger.debug("Fetching block not in cache: %s", h)
-        block = clients[clientname].get_block_by_hash(h)
+        block = get_client(clientname).get_block_by_hash(h)
         block_hash_cache[h] = block
         if block is not None:
             block_number_cache[int(block['number'], 16)] = block
@@ -39,7 +52,7 @@ def get_block_by_number(clientname, num):
 
     if num not in block_number_cache:
         app.logger.debug("Fetching block not in cache: %d", num)
-        block = clients[clientname].get_block_by_number(int(num))
+        block = get_client(clientname).get_block_by_number(int(num))
         block_number_cache[num] = block
         if block is not None:
             block_hash_cache[block['hash']] = block
@@ -105,7 +118,7 @@ lastpolled = {}
 latest_blocks = {}
 def get_latest_block(clientname):
     if clientname not in lastpolled or datetime.datetime.now() - lastpolled[clientname] > datetime.timedelta(seconds=5):
-        latest_blocks[clientname] = clients[clientname].get_block_by_number('latest', False)
+        latest_blocks[clientname] = get_client(clientname).get_block_by_number('latest', False)
     return latest_blocks[clientname]
 
 
@@ -131,11 +144,12 @@ def build_block_info(clientname):
         'blockInterval': "%.1f" % (blockInterval,),
         'hashRate': "%.1f" % (hashRate / 1000000000),
         'name': clientname,
+        'explore': get_nodes()[clientname]['explorer'] % (latest['hash'],)
     }
     
 
 def build_block_infos():
-    infos = [build_block_info(clientname) for clientname in clients]
+    infos = [build_block_info(name) for name in get_nodes()]
     max_difficulty = float(max(info['difficulty'] for info in infos))
     max_total_difficulty = max(info['totalDifficulty'] for info in infos)
     for info in infos:
