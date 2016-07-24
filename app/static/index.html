@@ -100,7 +100,7 @@
             {{/latest}}
         </tr>
         <tr>
-            <th>Difficulty <span title="Difficulty of creating a block, relative to the most difficult chain. Difficulty does not linearly correspond to hash rate." style="color: #555" class="glyphicon glyphicon-question-sign"></span></th>
+            <th>Difficulty <span title="Difficulty of creating a block, relative to the most difficult chain." style="color: #555" class="glyphicon glyphicon-question-sign"></span></th>
             {{#latest}}
                 <td>{{difficulty}}%</td>
             {{/latest}}
@@ -115,6 +115,12 @@
             <th>Block interval <span title="Average number of seconds between blocks, for the past 100 blocks." style="color: #555" class="glyphicon glyphicon-question-sign"></span></th>
             {{#latest}}
                 <td>{{blockInterval}} sec</td>
+            {{/latest}}
+        </tr>
+        <tr>
+            <th>Hash rate <span title="Approximate number of hashes/sec computed by miners, derived from difficulty and block interval." style="color: #555" class="glyphicon glyphicon-question-sign"></span></th>
+            {{#latest}}
+                <td>{{hashRate}} GH/s</td>
             {{/latest}}
         </tr>
     </script>

@@ -117,14 +117,19 @@ def build_block_info(clientname):
     earlier = get_block_by_number(clientname, latestNumber - 100)
     earlierTimestamp = long(earlier['timestamp'], 16)
 
+    difficulty = long(latest['difficulty'], 16)
+    blockInterval = (latestTimestamp - earlierTimestamp) / 100.0
+    hashRate = difficulty / blockInterval
+
     return {
         'number': latestNumber,
         'timestamp': latestTimestamp,
         'hash': latest['hash'],
         'shortHash': latest['hash'][:10],
-        'difficulty': long(latest['difficulty'], 16),
+        'difficulty': difficulty,
         'totalDifficulty': long(latest['totalDifficulty'], 16) - fork_total_difficulty,
-        'blockInterval': "%.1f" % ((latestTimestamp - earlierTimestamp) / 100.0,),
+        'blockInterval': "%.1f" % (blockInterval,),
+        'hashRate': "%.1f" % (hashRate / 1000000000),
         'name': clientname,
     }
     
