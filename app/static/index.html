@@ -100,15 +100,21 @@
             {{/latest}}
         </tr>
         <tr>
-            <th>Difficulty</th>
+            <th>Difficulty <span title="Difficulty of creating a block, relative to the most difficult chain. Difficulty does not linearly correspond to hash rate." style="color: #555" class="glyphicon glyphicon-question-sign"></span></th>
             {{#latest}}
                 <td>{{difficulty}}%</td>
             {{/latest}}
         </tr>
         <tr>
-            <th>Total Difficulty</th>
+            <th>Total Difficulty <span title="Sum of block difficulty values since the fork, relative to the chain with highest total difficulty." style="color: #555" class="glyphicon glyphicon-question-sign"></span></th>
             {{#latest}}
-                <td>{{totalDifficulty}}</td>
+                <td>{{totalDifficulty}}%</td>
+            {{/latest}}
+        </tr>
+        <tr>
+            <th>Block interval <span title="Average number of seconds between blocks, for the past 100 blocks." style="color: #555" class="glyphicon glyphicon-question-sign"></span></th>
+            {{#latest}}
+                <td>{{blockInterval}} sec</td>
             {{/latest}}
         </tr>
     </script>

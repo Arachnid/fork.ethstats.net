@@ -11,7 +11,7 @@ spec:
     spec:
       containers:
       - name: chainstate
-        image: arachnid/chainstate:v0.0.18
+        image: arachnid/chainstate:v0.0.20
         ports:
         - containerPort: 80
           hostPort: 80

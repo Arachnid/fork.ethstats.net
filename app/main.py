@@ -10,12 +10,14 @@ from chainstate import config
 
 graph_length=16
 cache_duration = 3600
+fork_total_difficulty = 39490902020018959982l
 app = Flask(__name__)
 clients = {nodes[0]: Client(host=nodes[1], port=nodes[2]) for nodes in config.nodes}
 
 
 block_hash_heap = []
 block_hash_cache = {}
+block_number_cache = {}
 latest = 0
 def get_block_by_hash(clientname, h):
     global latest
@@ -25,10 +27,26 @@ def get_block_by_hash(clientname, h):
         block = clients[clientname].get_block_by_hash(h)
         block_hash_cache[h] = block
         if block is not None:
+            block_number_cache[int(block['number'], 16)] = block
             ts = long(block['timestamp'], 16)
             latest = max(latest, ts)
-            heapq.heappush(block_hash_heap, (ts, h))
+            heapq.heappush(block_hash_heap, (ts, h, int(block['number'], 16)))
     return block_hash_cache[h]
+
+
+def get_block_by_number(clientname, num):
+    global latest
+
+    if num not in block_number_cache:
+        app.logger.debug("Fetching block not in cache: %d", num)
+        block = clients[clientname].get_block_by_number(int(num))
+        block_number_cache[num] = block
+        if block is not None:
+            block_hash_cache[block['hash']] = block
+            ts = long(block['timestamp'], 16)
+            latest = max(latest, ts)
+            heapq.heappush(block_hash_heap, (ts, block['hash'], num))
+    return block_number_cache[num]
 
 
 def find_ancestors(roots, earliest):
@@ -55,9 +73,10 @@ def find_ancestors(roots, earliest):
 
     # Clean up the cache
     while block_hash_heap:
-        blockts, blockhash = block_hash_heap[0]
+        blockts, blockhash, blocknum = block_hash_heap[0]
         if blockts >= latest - cache_duration: break
         heapq.heappop(block_hash_heap)
+        del block_number_cache[blocknum]
         del block_hash_cache[blockhash]
 
     return blocks
@@ -92,13 +111,20 @@ def get_latest_block(clientname):
 
 def build_block_info(clientname):
     latest = get_latest_block(clientname)
+    latestNumber = long(latest['number'], 16)
+    latestTimestamp = long(latest['timestamp'], 16)
+
+    earlier = get_block_by_number(clientname, latestNumber - 100)
+    earlierTimestamp = long(earlier['timestamp'], 16)
+
     return {
-        'number': long(latest['number'], 16),
-        'timestamp': long(latest['timestamp'], 16),
+        'number': latestNumber,
+        'timestamp': latestTimestamp,
         'hash': latest['hash'],
         'shortHash': latest['hash'][:10],
         'difficulty': long(latest['difficulty'], 16),
-        'totalDifficulty': long(latest['totalDifficulty'], 16),
+        'totalDifficulty': long(latest['totalDifficulty'], 16) - fork_total_difficulty,
+        'blockInterval': "%.1f" % ((latestTimestamp - earlierTimestamp) / 100.0,),
         'name': clientname,
     }
     
@@ -108,11 +134,8 @@ def build_block_infos():
     max_difficulty = float(max(info['difficulty'] for info in infos))
     max_total_difficulty = max(info['totalDifficulty'] for info in infos)
     for info in infos:
-        info['difficulty'] = "%.1f" % (100 * info['difficulty'] / float(max_difficulty),)
-        if info['totalDifficulty'] == max_total_difficulty:
-            info['totalDifficulty'] = 'D'
-        else:
-            info['totalDifficulty'] = 'D - %f' % (max_total_difficulty - info['totalDifficulty'])
+        info['difficulty'] = "%.2f" % (100 * info['difficulty'] / float(max_difficulty),)
+        info['totalDifficulty'] = "%.2f" % (100 * info['totalDifficulty'] / float(max_total_difficulty),)
     return infos
 
 
