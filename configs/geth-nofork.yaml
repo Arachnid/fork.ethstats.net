@@ -11,7 +11,8 @@ spec:
     spec:
       containers:
       - name: geth-nofork
-        image: arachnid/geth:v1.4.10
+        image: arachnid/geth:latest
+        imagePullPolicy: always
         args: [ "--fast", "--rpc", "--rpcaddr=0.0.0.0", "--rpccorsdomain=*", "--oppose-dao-fork" ]
         ports:
         - containerPort: 30303
