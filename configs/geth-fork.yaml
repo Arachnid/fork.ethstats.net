@@ -11,7 +11,7 @@ spec:
     spec:
       containers:
       - name: geth-fork
-        image: arachnid/geth:v1.4.10
+        image: arachnid/geth:v1.4.12
         args: [ "--fast", "--rpc", "--rpcaddr=0.0.0.0", "--rpccorsdomain=*", "--support-dao-fork" ]
         ports:
         - containerPort: 30303
