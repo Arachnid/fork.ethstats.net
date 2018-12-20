@@ -1,6 +1,7 @@
-FROM tiangolo/uwsgi-nginx-flask:flask
-
+FROM jfloff/alpine-python:3.6-onbuild
 COPY ./app /app
+EXPOSE 5000
 
-COPY requirements.txt requirements.txt
-RUN pip install -r requirements.txt
+CMD ["python","./app/main.py"]
+
+
