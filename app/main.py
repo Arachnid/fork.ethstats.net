@@ -24,12 +24,44 @@ def get_nodes():
     else:
         return config.nodes_prod
 
+def hash_of(blockOrHash):
+    retval = blockOrHash
+    if type(blockOrHash) == web3.datastructures.AttributeDict:
+        blockOrHash = blockOrHash['hash']    
+    if type(blockOrHash) == dict:
+        blockOrHash = blockOrHash['hash']    
+    if type(blockOrHash) == hexbytes.HexBytes:
+        retval = blockOrHash.hex()
+    else:
+        retval = blockOrHash
+    return retval
+
+def to_dict(block):
+    """ Blocks can be quite large, so we use this method to strip it down and only 
+    retain the bare essentials in memory, also converting hashes (ByteArray) into
+    regular hex-strings
+    """
+    uncles = [hash_of(u) for u in block['uncles']]
+    parentHash = hash_of(block['parentHash'])
+    return {
+        'number': block['number'],
+        'timestamp': block['timestamp'],
+        'hash': hash_of(block),
+        'difficulty': block['difficulty'],
+        'totalDifficulty': block['totalDifficulty'],
+        'size': block['size'],
+        'gasUsed': block['gasUsed'],
+        'parentHash' : parentHash,
+        'gasLimit': block['gasLimit'],
+        'uncles': uncles,
+        'parents': [parentHash] + uncles,
+    }
+
 
 clients = {}
 def get_client(name):
     if len(clients) == 0:
         clients.update({name: Web3(Web3.HTTPProvider(node['url'])) for name, node in get_nodes().items()})
-#        clients.update({name: Client(host=node['host'], port=node['port']) for name, node in get_nodes().iteritems()})
     return clients[name]
 
 
@@ -43,12 +75,27 @@ class BlockFetcher(object):
         self.block_number_cache = {}
         self.latest = 0
 
+    def get_latest(self):
+        
+        block = to_dict(self.client.eth.getBlock('latest'))
+        h = block['hash']
+
+        if h not in self.block_hash_cache and block is not None:
+            self.block_hash_cache[h] = block
+            self.block_number_cache[block['number']] = block
+            ts = block['timestamp']
+            self.latest = max(self.latest, ts)
+            self.tidy_heap()
+            heapq.heappush(self.block_hash_heap, (ts, h, block['number']))
+ 
+        return block
+
+
     def get_block_by_hash(self, h):
+        h = hash_of(h)
         if h not in self.block_hash_cache:
-            if type(h) == hexbytes.HexBytes:
-                h = h.hex()
             app.logger.debug("Fetching block not in cache: %s", h)
-            block = self.client.eth.getBlock(h)
+            block = to_dict(self.client.eth.getBlock(h))
             self.block_hash_cache[h] = block
             if block is not None:
                 self.block_number_cache[block['number']] = block
@@ -62,15 +109,16 @@ class BlockFetcher(object):
     def get_block_by_number(self, num):
         if num not in self.block_number_cache:
             app.logger.debug("Fetching block not in cache: %d", num)
-            block = self.client.eth.getBlock(int(num))
+            block = to_dict(self.client.eth.getBlock(int(num)))
             self.block_number_cache[num] = block
             if block is not None:
-                self.block_hash_cache[block['hash']] = block
+                h = hash_of(block)
+                self.block_hash_cache[h] = block
                 ts = block['timestamp']
                 self.latest = max(self.latest, ts)
 
                 self.tidy_heap()
-                heapq.heappush(self.block_hash_heap, (ts, block['hash'], num))
+                heapq.heappush(self.block_hash_heap, (ts, h, num))
         return self.block_number_cache[num]
 
     def tidy_heap(self):
@@ -87,6 +135,7 @@ def get_fetcher(name):
     return fetchers[name]
 
 
+
 def find_ancestors(roots, earliest):
     blocks = {}
     for clientname, roothash in roots:
@@ -98,12 +147,12 @@ def find_ancestors(roots, earliest):
                 app.logger.debug("Discarded missing block with hash %s", blockhash)
                 continue
 
-            block = dict(block)
-            blocks[block['hash']] = block
+            #block = to_dict(block)
+            blocks[hash_of(block)] = block
 
             ts = block['timestamp']
             if ts >= earliest:
-                if block['parentHash'] not in blocks:
+                if hash_of(block['parentHash']) not in blocks:
                     frontier.add(block['parentHash'])
                 for uncle in block['uncles']:
                     if uncle not in blocks:
@@ -114,19 +163,7 @@ def find_ancestors(roots, earliest):
 
 def build_block_graph(roots, earliest):
     blocks = find_ancestors(roots, earliest)
-    nodes = []
-    for (h, block) in blocks.items():
-        nodes.append({
-            'number': block['number'],
-            'timestamp': block['timestamp'],
-            'hash': block['hash'].hex(),
-            'difficulty': block['difficulty'],
-            'totalDifficulty': block['totalDifficulty'],
-            'size': block['size'],
-            'gasUsed': block['gasUsed'],
-            'gasLimit': block['gasLimit'],
-            'parents': [block['parentHash'].hex()] + [u.hex() for u in block['uncles']],
-        })
+    nodes = [block for (h,block) in blocks.items()]
     nodes.sort(key=lambda node: node['number'])
     return nodes
 
@@ -135,13 +172,12 @@ lastpolled = {}
 latest_blocks = {}
 def get_latest_block(clientname):
     if clientname not in lastpolled or datetime.datetime.now() - lastpolled[clientname] > datetime.timedelta(seconds=5):
-        latest_blocks[clientname] = get_client(clientname).eth.getBlock('latest', False)
+        latest_blocks[clientname] = get_fetcher(clientname).get_latest()
     return latest_blocks[clientname]
 
 
 def build_block_info(clientname):
     latest = get_latest_block(clientname)
-#    latestNumber = int(latest['number'], 16)
     latestNumber = int(latest['number'])    
     latestTimestamp = latest['timestamp']
 
@@ -155,14 +191,14 @@ def build_block_info(clientname):
     return {
         'number': latestNumber,
         'timestamp': latestTimestamp,
-        'hash': latest['hash'].hex(),
-        'shortHash': latest['hash'].hex()[:10],
+        'hash': latest['hash'],
+        'shortHash': latest['hash'][:10],
         'difficulty': difficulty,
         'totalDifficulty': latest['totalDifficulty'] - fork_total_difficulty,
         'blockInterval': "%.1f" % (blockInterval,),
         'hashRate': "%.1f" % (hashRate / 1000000000),
         'name': clientname,
-        'explore': get_nodes()[clientname]['explorer'] % (latest['hash'].hex(),),
+        'explore': get_nodes()[clientname]['explorer'] % (latest['hash'],),
     }
     
 
@@ -180,6 +216,9 @@ def build_block_infos():
 def index():
     return send_file('./static/index.html')
 
+@app.route('/favicon.ico')
+def favicon():
+    return send_file('./static/favicon.ico')
 
 @app.route('/blocks')
 def blocks(): 
@@ -188,8 +227,6 @@ def blocks():
     earliest = max(int(request.args.get('since', latest - 300)), latest - cache_duration)
     roots = [(block['name'], block['hash']) for block in blockinfos]
     nodes = build_block_graph(roots, earliest)
-    #app.logger.debug(blockinfos)
-    #app.logger.debug(nodes)
     response = make_response(json.dumps({
         'latest': blockinfos,
         'nodes': nodes,
