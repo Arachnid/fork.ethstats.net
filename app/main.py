@@ -16,7 +16,7 @@ cache_duration = 3600
 cache_blocks = 1000
 fork_total_difficulty = 8352655385330519099922
 app = Flask(__name__)
-
+app.config['PROPAGATE_EXCEPTIONS'] = True
 
 def get_nodes():
     if app.debug:
@@ -124,8 +124,8 @@ class BlockFetcher(object):
     def tidy_heap(self):
         while len(self.block_hash_heap) > self.cache_blocks and self.block_hash_heap[0][0] < self.latest - self.cache_duration:
             blockts, blockhash, blocknum = heapq.heappop(self.block_hash_heap)
-            del block_number_cache[blocknum]
-            del block_hash_cache[blockhash]
+            del self.block_number_cache[blocknum]
+            del self.block_hash_cache[blockhash]
 
 
 fetchers = {}
@@ -200,7 +200,7 @@ def build_block_info(clientname):
         'name': clientname,
         'explore': get_nodes()[clientname]['explorer'] % (latest['hash'],),
     }
-    
+
 
 def build_block_infos():
     infos = [build_block_info(name) for name in get_nodes()]
