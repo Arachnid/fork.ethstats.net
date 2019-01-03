@@ -16,7 +16,7 @@ cache_duration = 3600
 cache_blocks = 1000
 fork_total_difficulty = 8352655385330519099922
 app = Flask(__name__)
-
+app.config['PROPAGATE_EXCEPTIONS'] = True
 
 def get_nodes():
     if app.debug:
@@ -200,7 +200,7 @@ def build_block_info(clientname):
         'name': clientname,
         'explore': get_nodes()[clientname]['explorer'] % (latest['hash'],),
     }
-    
+
 
 def build_block_infos():
     infos = [build_block_info(name) for name in get_nodes()]
